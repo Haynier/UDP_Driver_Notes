@@ -1,0 +1,217 @@
+# This is a psuedo-code-ish version of what is put for in "Linux Device Drivers"
+
+### Network Device Struct ###
+net_device:
+	
+	### Global Info ###
+	char name
+	ulong state # open, closed, etc...
+	net_device* next # Pointer to the next device in a linked list
+	int init(net_device*) # Initialization function
+
+	### Hardware Info ###
+	ulong rmem_end
+	ulong rmem_start
+	ulong mem_end
+	ulong mem_start
+	#holds the start and end of addresses in shared memory, rmem is for recieving
+
+	ulong base_addr # I/O base address of net interface
+	uchar irq # Interrupt number
+
+	uchar if_port # Port to use in multiport devices, not neccasary here
+
+	uchar dma # Direct memory access channel
+
+	### Interface Info ###
+	# This is presented as very ethernet specific
+	void ltalk_setup(net_device*) # Sets up LocalTalk device
+	void fc_setup(net_device*) # Initializes fields for fiber-channel devices
+	void fddi_setup(net_device*) # Configures interface for a FDDI network
+	void hippi_setup(net_device*) # Prepares for HIPPI interconnect driver
+	void tr_setup(net_device*) # Setup for token ring network interfaces
+
+	# Those all control the following fields, they can also be changed by hand
+
+	ushort hard_header_len # Number of ocets that lead a packet before header or protocol info, check for interface
+	uint mtu # maximum transfer unit, check for interface
+	ulong tx_queue_len # Max number of frames in a tx queue, depends on use of system memory
+	ushort type # Hardware type used by ARP to dtermine hardware address
+
+	uchar addr_len 
+	uchar broaadcast[MAX_ADDR_LEN]
+	uchar dev_addr[MAX_ADDR_LEN]
+	# MAC address length and hardware addresses
+
+	ushort flags
+	int features
+	# Flag and feature options defined on pages 509-511
+
+	### Device Methods ###
+	int open(net_device*) # Opens interface, registers system resources and other setup
+
+	int stop(net_device*) # Stops interface, reverses open
+
+	int hard_start_xmit(sk_buff*, net_device*) # Initiates transmission, packet is contained in sk_buff
+
+	int hard_header(sk_buff*, net_device*, ushort type, *daddr, *saddr, uint len) # Builds hardware header
+
+	int rebuild_header(sk_buff*) # Rebuild hardware header after ARP resolution
+
+	void tx_timeout(net_device*) # Called when packet transmission fails to complete in a reasonable period, possibly IP specific
+
+	net_device_stats get_stats(net_device*) # Retrieves stats, low priority
+
+	int set_config(net_device*, ifmap*) # Changes interface config, not implimented for modern hardware
+
+	# There are several other optional operations on page 513
+
+	### Utility Fields ###
+	ulong tx_start # Time of tx start
+	ulong last_rx # Time of last rx
+
+	int watchdog_time # Minimum time that passes before tx_timeout is called
+
+	void priv() # Private data, filp->private_data
+
+	dev_mc_list mc_list() # handles multicast tx, low priority
+	int mc_count
+
+	spinlock_t xmit_lock
+	int xmit_lock_owner # prevents multiple calls to hard_start_xmit
+
+
+### Opening and Closing ###
+
+int open(net_device* dev){
+	$ request resources from the kernal $
+	$ assign hardware address $
+	$ Copy MAC address from hardware device into dev->dev_addr $
+	$ start transmit queue $
+
+	return 0
+}
+
+int close(net_device* dev){
+	$ release resources $
+	$ stop transmit queue $
+
+	return 0
+}
+
+### Sending and Receiving ###
+
+int tx(sk_buff* skb, net_device* dev){
+	int len = skb->len
+	char* data = skb->data
+
+	priv* priv = netdev_priv(dev) # ???
+
+	$ check data length is within limit and adjust accordingly$
+
+	dev->trans_start = now
+	priv->skb = skb
+
+	$ deliver data via hardware $
+
+	return 0
+
+}
+
+
+void tx_timeout(net_device* dev){
+	priv* priv = netdev_priv(dev) # ???
+	$ stop tx queue $
+	priv->status = TX_INTR
+	priv->stats.tx_errors++
+	$ restart tx queue $
+}
+
+
+void rx(net_device* dev, packet* pkt){
+	sk_buff* skb
+	priv* priv = netdev_priv(dev) # ???
+
+	$ receive based on hardware $
+
+	skb = alloc_skb(pkt->datalen + 2)
+
+	$ error for no allocated buffer $
+
+	$ copy pkt into skb $
+
+	skb->dev = dev
+	$ update skb protocol $
+	$ checksums, ill ignore this $
+	$ stats $
+	$ pass skb to upper layers $
+}
+
+### Interrupt Handler ###
+
+
+#########################
+
+
+### Socket buffer struct ###
+sk_buff:
+	net_device* dev # Device sending or recieveing
+
+	union h
+	union hh
+	union mac # pointers to different layer headers page 529
+
+	uchar* head
+	uchar* data
+	uchar* tail
+	uchar* end # Pointers to address space data
+
+	uint len
+	uint data_len
+
+	uchar ip_summed # checksum policy
+
+	uchar pkt_type
+
+	$ shared info $
+
+# Methods on socket buffers
+sk_buff alloc_skb(uint len, int priority) # allocates space for buffer
+
+void free_skb(sk_buff*) # frees memory
+
+uchar skb_put(sk_buff*) # Adds data to the end of a buffer, updates tail and len
+
+uchar skb_push(sk_buff*, int len) # Prepend buffer
+
+int skb_tailroom(sk_buff*) # returns the amount of space at the end of the buffer
+
+int skb_headroom(sk_buff*) # returns amount of space at beginning of the buffer
+
+void skb_reserve(sk_buff*, int len) # reserves headroom for buffer
+
+uchar skb_pull(sk_buff*, int len) # removes data from the head of a packet
+
+bool skb_is_linear # Checks if skb is fragmented, gonna ignore non-linear skb's
+
+int skb_headlen(sk_buff*) # retruns head length
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
